@@ -8,27 +8,187 @@ format: typst
 ## **Part 0: libraries**
 
 ```{r}
-
+library(tidyverse)
+#install.packages("sf")
+library(sf)
+#install.packages("maps")
+library(maps)
+#install.packages("ggrepel")
+library(ggrepel)
 ```
 
 ## **Part 1:** **Defining Research Question**
 
-Chosen Question:
+Chosen Question: What is the relationship between the change in the use of clean energy in a state and the change in price in energy in the state?
 
 ## **Part 2: Data Preparation and Cleaning**
 
 ```{r}
+library(tidyverse)
+#install.packages("sf")
+library(sf)
+#i  mutate(Energy_Source=str_replace(Energy_Source,"NaturalGas","Natural Gas"))|>
+    mutate(Energy_Source=str_replace(Energy_Source,"petroleum \\(BTU\\)","Petroleum"))|>
+    mutate(Energy_Source=str_replace(Energy_Source,"nuclear-energy †","Nuclear")) |>
+    mutate(Energy_Source=str_replace(Energy_Source,"total renewable-energy", "Renewable"))
+#now fix ugly energy price data
+#needs to be vec to use stringr functions
+energy_price_vec<-energy_price_raw[[1]]
+energy_price_vec
+#seperate values
+split_lines<-strsplit(energy_price_vec,",")
+split_lines
+#create tibble
+energy_price_clean <- tibble(
+     State = sapply(split_lines, `[`, 1),
+     `2021` = sapply(split_lines, `[`, 2),
+    `2022` = sapply(split_lines, `[`, 3),
+   `2023` = sapply(split_lines, `[`, 4)
+)
+#string clean
+extract_number <- function(x) {
+   nums <- as.numeric(str_extract_all(x, "[0-9]+\\.?[0-9]*")[[1]])
+   if(length(nums) == 0) return(NA_real_)
+   nums[1]   # take first number found
+ }
+ energy_price_clean <- energy_price_clean |>
+   mutate(
+    `2021` = sapply(`2021`, extract_number),
+     `2022` = sapply(`2022`, extract_number),
+     `2023` = sapply(`2023`, extract_number)
+   )
+ energy_price_clean
+ #could not get clean frame without NAs without asssistance
+ #remove header
+energy_price_clean <- energy_price_clean |>
+  filter(State != "", State != "State")
+energy_price_cleannstall.packages("maps")
+library(maps)
+#install.packages("ggrepel")
+library(ggrepel)
+```
 
+## **Part 1:** **Defining Research Question**
+
+Chosen Questions: What is the relationship between the change in the use of clean energy in a state and the change in price in energy in the state?
+
+## **Part 2: Data Preparation and Cleaning**
+
+```{r}
+#reading csvs
+energy_price_raw<-read_csv("data/av-energy-price-2021-2023.csv")
+total_2021_raw<-read_csv("data/total-use-2021.csv")
+total_2022_raw<-read_csv("data/total-use-2022.csv")
+total_2023_raw<-read_csv("data/total-use-2023.csv")
+#standardize energy source names in total energy use sets
+total_2021_clean<-total_2021_raw |>
+    mutate(Energy_Source=str_replace(Energy_Source,"Natural Gas†", "Natural Gas")) |>
+mutate(Energy_Source=str_replace(Energy_Source,"Petroleum \\(BTU\\)","Petroleum")) |>
+mutate(Energy_Source=str_replace(Energy_Source, "nuclear","Nuclear")) |>
+mutate(Energy_Source=str_replace(Energy_Source, "total_renewable_energy", "Renewable"))
+total_2022_clean<- total_2022_raw |>
+    mutate(Energy_Source=str_replace(Energy_Source, "coal Consumption","Coal"))|>
+    mutate(Energy_Source=str_replace(Energy_Source,"Natural-Gas","Natural Gas"))|>
+    mutate(Energy_Source=str_replace(Energy_Source,"petroleum \\(btu\\)","Petroleum"))|>
+    mutate(Energy_Source=str_replace(Energy_Source, "Nuclear Energy†","Nuclear"))|>
+    mutate(Energy_Source=str_replace(Energy_Source,"total_renewables","Renewable"))
+total_2023_clean<-total_2023_raw|>
+    mutate(Energy_Source=str_replace(Energy_Source,"coal_usage","Coal"))|>
+  
 ```
 
 ## **Part 3: Joining / Pivoting Datasets for Analysis**
 
 ```{r}
-
+#I am just going to focus on 2021 and 2023 for simplicity's sake
+#I need a statistic for the proportion of energy use that is renewable in 2021 and 2023, the change in the proportion, and the change in price of energy
+#price change
+energy_price_clean <- energy_price_clean |>
+ mutate(Change_Price = `2023` - `2021`)
+ energy_price_clean
+ #proportion clean
+#2021
+  prop_renew_2021 <- total_2021_clean |>
+ summarise(across(-Energy_Source, sum)) |>
+   pivot_longer(everything(), names_to = "State", values_to = "Total_Energy") |>
+  mutate(Prop_Renew_2021 = total_2021_clean |>
+           filter(Energy_Source == "Renewable") |>
+           select(-Energy_Source) |>
+          pivot_longer(everything(), names_to = "State", values_to = "Renewable") |>
+           pull(Renewable) / Total_Energy)
+ 
+# For 2023
+ prop_renew_2023 <- total_2023_clean |>
+   summarise(across(-Energy_Source, sum)) |>
+   pivot_longer(everything(), names_to = "State", values_to = "Total_Energy") |>
+   mutate(Prop_Renew_2023 = total_2023_clean |>
+            filter(Energy_Source == "Renewable") |>
+            select(-Energy_Source) |>
+         pivot_longer(everything(), names_to = "State", values_to = "Renewable") |>
+           pull(Renewable) / Total_Energy)
+#join
+renew_change <- prop_renew_2021 |>
+  left_join(prop_renew_2023 |> 
+  select(State, Prop_Renew_2023), by = "State")|>
+  mutate(Change_Prop = Prop_Renew_2023 - Prop_Renew_2021)
+#join w change price
+final<- prop_renew_2021|>
+   left_join(prop_renew_2023 %>% select(State, Prop_Renew_2023), by = "State")|>
+   mutate(Change_Prop = Prop_Renew_2023 - Prop_Renew_2021) |>
+   left_join(energy_price_clean %>% select(State, Change_Price), by = "State")
 ```
 
 ## **Part 4: Mapping Visualization**
+states_map <- map_data("state")
 
+# Prepare final data
+final_map <- final %>%
+  filter(!State %in% c("AK", "HI", "DC")) %>%
+  mutate(region = tolower(state.name[match(State, state.abb)]))
+
+# Join map data with energy data
+map_data_joined <- states_map %>%
+  left_join(final_map, by = "region")
+
+# Calculate centroids for dots
+state_centroids <- map_data_joined %>%
+  group_by(region) %>%
+  summarise(
+    long = mean(range(long)),
+    lat = mean(range(lat)),
+    Change_Prop = first(Change_Prop)
+  )
+
+ggplot() +
+  geom_polygon(
+    data = map_data_joined,
+    aes(x = long, y = lat, group = group, fill = Change_Price),
+    color = "white"
+  ) +
+  geom_point(
+    data = state_centroids,
+    aes(x = long, y = lat, color = pmax(Change_Prop, 0)),
+    size = 2,       # smaller dots
+    alpha = 0.8
+  ) +
+  scale_fill_gradient2(
+    low = "green",
+    mid = "white",
+    high = "red",
+    midpoint = 0,
+    name = "Change in Energy Price"
+  ) +
+  scale_color_gradient(
+    low = "lightblue",
+    high = "darkblue",
+    name = "Increase in Renewable\nProportion"
+  ) +
+  coord_fixed(1.3) +
+  theme_minimal() +
+  labs(
+    title = "US Energy Changes (2021-2023)",
+    x = "", y = ""
+  )
 ```{r}
 
 ```
