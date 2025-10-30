@@ -139,6 +139,7 @@ final<- prop_renew_2021|>
 ```
 
 ## **Part 4: Mapping Visualization**
+```{r}
 states_map <- map_data("state")
 
 # Prepare final data
@@ -189,6 +190,5 @@ ggplot() +
     title = "US Energy Changes (2021-2023)",
     x = "", y = ""
   )
-```{r}
-
 ```
+I am having a lot of difficulty rendering the report. I am not sure what the problem is. But, my findings were that the cost of energy has increased in every state from 2021-2023. And unfortunately, there is not a discernable relationship between the proportion that a state's renewable use has increased and the increase in price. Energy costs are increasing, despite states increasing renewable use. With further analysis, perhaps we coud determine that renewable energy sources are not actually cheaper at the level they are currently being used. 
